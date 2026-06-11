@@ -26,6 +26,7 @@
     --read: #4caf7d;
     --reading: #e8a44a;
     --want: #aaa;
+    --dropped: #e53935;
     --film-accent: #c0715c;  /* терракота для фильмов */
     --film-soft: #f6ece8;
   }
@@ -204,6 +205,7 @@
   .status-read { background: var(--read); }
   .status-reading { background: var(--reading); }
   .status-want { background: var(--want); border: 1.5px solid var(--rule); background: transparent; }
+  .status-dropped { background: var(--dropped); }
 
   .item-title {
     font-family: 'Literata', serif;
@@ -410,7 +412,8 @@
     <button class="chip" data-filter="all" onclick="setStatusFilter('all')">Все</button>
     <button class="chip" data-filter="reading" onclick="setStatusFilter('reading')">⚡ Читаю/Смотрю</button>
     <button class="chip" data-filter="read" onclick="setStatusFilter('read')">✓ Прочитано/Просмотрено</button>
-    <button class="chip" data-filter="want" onclick="setStatusFilter('want')">☆ Хочу</button>
+    <button class="chip" data-filter="want" onclick="setStatusFilter('want')">Хочу</button>
+    <button class="chip" data-filter="dropped" onclick="setStatusFilter('dropped')">✕ Бросила</button>
   </div>
   <div class="divider"></div>
   <select class="sort-select" onchange="setSort(this.value)" id="sort-select">
@@ -452,9 +455,10 @@
     <input type="text" id="f-genre" placeholder="Роман, Документальный…">
     <label>Статус</label>
     <select id="f-status">
-      <option value="want">☆ Хочу</option>
+      <option value="want">Хочу</option>
       <option value="reading">⚡ Читаю / Смотрю</option>
       <option value="read">✓ Прочитано / Просмотрено</option>
+      <option value="dropped">✕ Бросила</option>
     </select>
     <label>Заметка (необязательно)</label>
     <input type="text" id="f-note" placeholder="Коротко о впечатлении…">
@@ -473,7 +477,7 @@ let statusFilter = 'all';
 let sortMode = 'added';
 let editingId = null;
 
-const STATUS_ORDER = { reading: 0, read: 1, want: 2 };
+const STATUS_ORDER = { reading: 0, read: 1, want: 2, dropped: 3 };
 
 function save() {
   localStorage.setItem('mylib_v2', JSON.stringify(items));
@@ -583,9 +587,9 @@ function render() {
 }
 
 function renderItem(item) {
-  const statusClass = { read: 'status-read', reading: 'status-reading', want: 'status-want' }[item.status] || 'status-want';
-  const statusLabel = { read: 'Прочитано / Просмотрено', reading: 'Читаю / Смотрю', want: 'Хочу' }[item.status];
-  const nextStatus = { want: 'reading', reading: 'read', read: 'want' }[item.status];
+  const statusClass = { read: 'status-read', reading: 'status-reading', want: 'status-want', dropped: 'status-dropped' }[item.status] || 'status-want';
+  const statusLabel = { read: 'Прочитано / Просмотрено', reading: 'Читаю / Смотрю', want: 'Хочу', dropped: 'Бросила' }[item.status];
+  const nextStatus = { want: 'reading', reading: 'read', read: 'dropped', dropped: 'want' }[item.status];
   const doneClass = item.status === 'read' ? ' done' : '';
   const favClass = item.fav ? ' on' : '';
   const genreClass = item.type === 'film' ? 'genre-films' : 'genre-books';
@@ -594,7 +598,7 @@ function renderItem(item) {
   return `<div class="item" id="item-${item.id}">
     <div class="status-wrap">
       <div class="status-dot ${statusClass}" onclick="cycleStatus('${item.id}')" title="${statusLabel}"></div>
-      <div class="tip">${statusLabel} → клик: ${nextStatus === 'reading' ? 'Читаю' : nextStatus === 'read' ? 'Прочитано' : 'Хочу'}</div>
+      <div class="tip">${statusLabel} → клик: ${ {reading:'Читаю', read:'Прочитано', dropped:'Бросила', want:'Хочу'}[nextStatus] }</div>
     </div>
     <span class="item-title${doneClass}" ondblclick="openEdit('${item.id}')" title="Двойной клик — редактировать">${escHtml(item.title)}</span>
     ${item.genre ? `<span class="item-genre ${genreClass}">${escHtml(item.genre)}</span>` : ''}
@@ -625,7 +629,7 @@ function updateStats() {
 function cycleStatus(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
-  item.status = { want: 'reading', reading: 'read', read: 'want' }[item.status] || 'want';
+  item.status = { want: 'reading', reading: 'read', read: 'dropped', dropped: 'want' }[item.status] || 'want';
   save();
   render();
 }
@@ -737,7 +741,7 @@ function exportCSV() {
   items.forEach(i => rows.push([
     i.type === 'film' ? 'Фильм' : 'Книга',
     i.title, i.author||'', i.year||'', i.genre||'',
-    {read:'Прочитано',reading:'Читаю',want:'Хочу'}[i.status]||'',
+    {read:'Прочитано',reading:'Читаю',want:'Хочу',dropped:'Бросила'}[i.status]||'',
     i.fav ? '♥' : '', i.note||''
   ]));
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
