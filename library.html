@@ -192,7 +192,7 @@
     padding: 10px 4px;
     border-bottom: 1px solid var(--rule);
     transition: background 0.1s;
-    cursor: default;
+    cursor: pointer;
   }
   .item:hover { background: var(--paper-warm); }
 
@@ -686,16 +686,16 @@ function renderItem(item) {
   const genreClass = item.type === 'film' ? 'genre-films' : 'genre-books';
   const meta = [item.author, item.year].filter(Boolean).join(' · ');
 
-  return `<div class="item" id="item-${item.id}">
-    <div class="status-wrap">
+  return `<div class="item" id="item-${item.id}" onclick="openEdit('${item.id}')">
+    <div class="status-wrap" onclick="event.stopPropagation()">
       <div class="status-dot ${statusClass}" onclick="cycleStatus('${item.id}')" title="${statusLabel}"></div>
       <div class="tip">${statusLabel} → клик: ${ {reading:'Читаю', read:'Прочитано', dropped:'Бросила', want:'Хочу'}[nextStatus] }</div>
     </div>
-    <span class="item-title${doneClass}" ondblclick="openEdit('${item.id}')" title="Двойной клик — редактировать">${escHtml(item.title)}</span>
+    <span class="item-title${doneClass}">${escHtml(item.title)}</span>
     ${item.genre ? `<span class="item-genre ${genreClass}">${escHtml(item.genre)}</span>` : ''}
     ${meta ? `<span class="item-meta">${escHtml(meta)}</span>` : ''}
-    <button class="item-fav${favClass}" onclick="toggleFav('${item.id}')" title="Любимое">♥</button>
-    <button class="item-del" onclick="deleteItem('${item.id}')" title="Удалить">×</button>
+    <button class="item-fav${favClass}" onclick="event.stopPropagation(); toggleFav('${item.id}')" title="Любимое">♥</button>
+    <button class="item-del" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Удалить">×</button>
   </div>`;
 }
 
