@@ -1,4 +1,4 @@
-const CACHE = 'library-v1';
+const CACHE = 'library-v2';
 const ASSETS = [
   './library.html',
   './manifest.json',
