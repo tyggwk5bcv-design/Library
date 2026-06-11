@@ -469,18 +469,109 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+// ── FIREBASE ──
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCn1zbJlwSxMZUGIDsqzFPMbbP1ubN2eyI",
+  authDomain: "my-library-yk.firebaseapp.com",
+  projectId: "my-library-yk",
+  storageBucket: "my-library-yk.firebasestorage.app",
+  messagingSenderId: "1070982048227",
+  appId: "1:1070982048227:web:e0f632efc877b385a9d8d6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const COL = 'items';
+
 // ── STATE ──
-let items = JSON.parse(localStorage.getItem('mylib_v2') || '[]');
-let currentTab = 'books';   // books | films | all | fav
+let items = [];
+let currentTab = 'books';
 let statusFilter = 'all';
 let sortMode = 'added';
 let editingId = null;
 
 const STATUS_ORDER = { reading: 0, read: 1, want: 2, dropped: 3 };
 
-function save() {
+// ── FIREBASE SAVE / LOAD ──
+async function save() {
+  // всегда дублируем в localStorage как резерв
   localStorage.setItem('mylib_v2', JSON.stringify(items));
+}
+
+async function saveItem_db(item) {
+  try {
+    await setDoc(doc(db, COL, item.id), item);
+  } catch(e) {
+    console.error('Firestore write error:', e);
+  }
+}
+
+async function deleteItem_db(id) {
+  try {
+    await deleteDoc(doc(db, COL, id));
+  } catch(e) {
+    console.error('Firestore delete error:', e);
+  }
+}
+
+async function loadFromFirestore() {
+  showLoadingIndicator(true);
+  try {
+    const snap = await getDocs(collection(db, COL));
+    if (!snap.empty) {
+      items = snap.docs.map(d => d.data());
+      localStorage.setItem('mylib_v2', JSON.stringify(items));
+    } else {
+      // Firestore пустой — пробуем мигрировать из localStorage
+      const local = JSON.parse(localStorage.getItem('mylib_v2') || '[]');
+      if (local.length > 0) {
+        items = local;
+        // загружаем все локальные данные в Firestore
+        await Promise.all(items.map(item => setDoc(doc(db, COL, item.id), item)));
+        showMigrationNotice(local.length);
+      }
+    }
+  } catch(e) {
+    console.error('Firestore load error:', e);
+    // fallback на localStorage
+    items = JSON.parse(localStorage.getItem('mylib_v2') || '[]');
+    showOfflineNotice();
+  }
+  showLoadingIndicator(false);
+  render();
+}
+
+function showLoadingIndicator(on) {
+  let el = document.getElementById('loading-indicator');
+  if (on) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'loading-indicator';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;background:var(--accent);z-index:999;animation:loading 1s infinite';
+      document.body.appendChild(el);
+      const style = document.createElement('style');
+      style.textContent = '@keyframes loading{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}';
+      document.head.appendChild(style);
+    }
+  } else {
+    el?.remove();
+  }
+}
+
+function showMigrationNotice(count) {
+  const s = document.getElementById('sync-status');
+  s.textContent = `✓ Перенесено ${count} записей в облако`;
+  setTimeout(() => s.textContent = '', 5000);
+}
+
+function showOfflineNotice() {
+  const s = document.getElementById('sync-status');
+  s.textContent = '⚠ Офлайн — данные из локального кэша';
+  setTimeout(() => s.textContent = '', 5000);
 }
 
 function uid() {
@@ -631,6 +722,7 @@ function cycleStatus(id) {
   if (!item) return;
   item.status = { want: 'reading', reading: 'read', read: 'dropped', dropped: 'want' }[item.status] || 'want';
   save();
+  saveItem_db(item);
   render();
 }
 
@@ -639,12 +731,14 @@ function toggleFav(id) {
   if (!item) return;
   item.fav = !item.fav;
   save();
+  saveItem_db(item);
   render();
 }
 
 function deleteItem(id) {
   items = items.filter(i => i.id !== id);
   save();
+  deleteItem_db(id);
   render();
 }
 
@@ -706,9 +800,11 @@ function saveItem() {
       item.genre = document.getElementById('f-genre').value.trim();
       item.note = document.getElementById('f-note').value.trim();
       item.status = document.getElementById('f-status').value;
+      save();
+      saveItem_db(item);
     }
   } else {
-    items.unshift({
+    const newItem = {
       id: uid(),
       type,
       title,
@@ -719,10 +815,12 @@ function saveItem() {
       status: document.getElementById('f-status').value,
       fav: false,
       addedAt: Date.now()
-    });
+    };
+    items.unshift(newItem);
+    save();
+    saveItem_db(newItem);
   }
 
-  save();
   closeModal();
   render();
 }
@@ -756,16 +854,19 @@ function importJSON(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       const data = JSON.parse(ev.target.result);
       if (Array.isArray(data)) {
         const existing = new Set(items.map(i => i.id));
         let added = 0;
+        const newItems = [];
         data.forEach(item => {
-          if (!existing.has(item.id)) { items.push(item); added++; }
+          if (!existing.has(item.id)) { items.push(item); newItems.push(item); added++; }
         });
-        save(); render();
+        save();
+        await Promise.all(newItems.map(item => saveItem_db(item)));
+        render();
         alert(`Импортировано: ${added} новых записей.`);
       }
     } catch { alert('Ошибка: не удалось прочитать файл.'); }
@@ -891,17 +992,17 @@ function showCorsInstructions() {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
-function parsePastedMyShows() {
+async function parsePastedMyShows() {
   const raw = document.getElementById('ms-paste')?.value?.trim();
   if (!raw) return;
   try {
     const data = JSON.parse(raw);
-    // поддержка разных форматов ответа
     const shows = data.result || data;
     if (typeof shows !== 'object') throw new Error('Неожиданный формат');
 
     const entries = Array.isArray(shows) ? shows : Object.values(shows);
     let added = 0, updated = 0;
+    const toSave = [];
 
     entries.forEach(entry => {
       const show = entry.show || entry;
@@ -917,18 +1018,23 @@ function parsePastedMyShows() {
       if (existing) {
         existing.status = status;
         existing.myshowsId = msId;
+        toSave.push(existing);
         updated++;
       } else {
-        items.unshift({
+        const newItem = {
           id: uid(), myshowsId: msId, type: 'film',
           title, author: '', year, genre, note: '',
           status, fav: false, addedAt: Date.now()
-        });
+        };
+        items.unshift(newItem);
+        toSave.push(newItem);
         added++;
       }
     });
 
-    save(); render();
+    save();
+    await Promise.all(toSave.map(item => saveItem_db(item)));
+    render();
     document.querySelector('div[style*="position:fixed"]')?.remove();
     const s = document.getElementById('sync-status');
     s.textContent = `✓ ${added} добавлено, ${updated} обновлено`;
@@ -946,15 +1052,9 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── SERVICE WORKER ──
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
-
 // ── INIT ──
 switchTab('books');
+loadFromFirestore();
 </script>
 </body>
 </html>
