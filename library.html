@@ -681,7 +681,7 @@ function renderItem(item) {
   const statusClass = { read: 'status-read', reading: 'status-reading', want: 'status-want', dropped: 'status-dropped' }[item.status] || 'status-want';
   const statusLabel = { read: 'Прочитано / Просмотрено', reading: 'Читаю / Смотрю', want: 'Хочу', dropped: 'Бросила' }[item.status];
   const nextStatus = { want: 'reading', reading: 'read', read: 'dropped', dropped: 'want' }[item.status];
-  const doneClass = item.status === 'read' ? ' done' : '';
+  const doneClass = (item.status === 'read' || item.status === 'dropped') ? ' done' : '';
   const favClass = item.fav ? ' on' : '';
   const genreClass = item.type === 'film' ? 'genre-films' : 'genre-books';
   const meta = [item.author, item.year].filter(Boolean).join(' · ');
